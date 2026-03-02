@@ -20,6 +20,13 @@ dependencies:
   flutter:
     sdk: flutter
 
+flutter:
+  assets:
+    - assets/images/iphone_status_bar_black_left.png
+    - assets/images/iphone_status_bar_black_right.png
+    - assets/images/iphone_status_bar_white_left.png
+    - assets/images/iphone_status_bar_white_right.png
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
