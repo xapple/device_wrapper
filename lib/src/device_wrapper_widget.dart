@@ -100,6 +100,10 @@ class DeviceWrapper extends StatefulWidget {
   /// Callback when screenshot is taken
   final ValueChanged<ui.Image>? onScreenshot;
 
+  /// Whether to start with the photo-realistic iPhone PNG frame active.
+  /// Only applies when [initialMode] is [DeviceMode.iphone].
+  final bool initialRealisticFrame;
+
   const DeviceWrapper({
     super.key,
     required this.child,
@@ -114,6 +118,7 @@ class DeviceWrapper extends StatefulWidget {
     this.initialTheme = WrapperTheme.light,
     this.initialOrientation = DeviceOrientation.portrait,
     this.onScreenshot,
+    this.initialRealisticFrame = false,
   });
 
   @override
@@ -131,6 +136,7 @@ class _DeviceWrapperState extends State<DeviceWrapper>
   late WrapperTheme _theme;
   late DeviceOrientation _orientation;
   bool _wrapperEnabled = true;
+  bool _realisticFrame = false;
   final GlobalKey _screenshotKey = GlobalKey();
   final FocusNode _focusNode = FocusNode();
 
@@ -184,6 +190,7 @@ class _DeviceWrapperState extends State<DeviceWrapper>
     _lastDeviceMode = widget.initialMode;
     _theme = widget.initialTheme;
     _orientation = widget.initialOrientation;
+    _realisticFrame = widget.initialRealisticFrame;
 
     // Set initial device frame visibility based on mobile behavior
     if (_isOnMobileDevice) {
@@ -347,6 +354,12 @@ class _DeviceWrapperState extends State<DeviceWrapper>
   void _toggleWrapper() {
     setState(() {
       _wrapperEnabled = !_wrapperEnabled;
+    });
+  }
+
+  void _toggleRealisticFrame() {
+    setState(() {
+      _realisticFrame = !_realisticFrame;
     });
   }
 
@@ -698,8 +711,73 @@ class _DeviceWrapperState extends State<DeviceWrapper>
       return _buildWatchFrame(config);
     }
 
+    // iPhone with photo-realistic PNG frame overlay
+    if (_realisticFrame &&
+        _currentMode == DeviceMode.iphone &&
+        _orientation == DeviceOrientation.portrait) {
+      return _buildIphonePngFrame(config);
+    }
+
     // Phone/Tablet devices
     return _buildMobileFrame(config);
+  }
+
+  Widget _buildIphonePngFrame(DeviceConfig config) {
+    // Frame dimensions match the Flutter-drawn frame exactly: screen + border on each side.
+    // The PNG is scaled to fill this box, so it must have its screen hole in the same
+    // relative position (borderWidth inset from each edge).
+    final double frameW = config.width  + config.borderWidth * 2;
+    final double frameH = config.height + config.borderWidth * 2;
+
+    return SizedBox(
+      width: frameW,
+      height: frameH,
+      child: Stack(
+        alignment: Alignment.topLeft,
+        children: [
+          // App content — sits behind the PNG's transparent screen hole.
+          Positioned(
+            left: config.borderWidth,
+            top:  config.borderWidth,
+            width:  config.width,
+            height: config.height,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(70),
+              child: MediaQuery(
+                data: MediaQueryData(
+                  size: Size(config.width, config.height),
+                  devicePixelRatio: config.devicePixelRatio,
+                  padding: EdgeInsets.only(
+                    top: config.showNotch ? 59.0 : 24.0,
+                    bottom: config.showHomeIndicator ? 34.0 : 0.0,
+                  ),
+                ),
+                child: Stack(
+                  alignment: Alignment.topLeft,
+                  children: [
+                    Container(color: Colors.white, child: widget.child),
+                    _buildStatusBar(config, false),
+                  ],
+                ),
+              ),
+            ),
+          ),
+
+          // PNG frame on top — opaque bezel, transparent screen hole.
+          // IgnorePointer so the image doesn't swallow scroll/tap events
+          // meant for the app content underneath.
+          Positioned.fill(
+            child: IgnorePointer(
+              child: Image.asset(
+                'assets/images/iphone16pro_black.png',
+                package: 'device_wrapper',
+                fit: BoxFit.fill,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _buildMobileFrame(DeviceConfig config) {
@@ -738,6 +816,7 @@ class _DeviceWrapperState extends State<DeviceWrapper>
         ),
       ),
       child: Stack(
+        clipBehavior: Clip.none,
         children: [
           // Screen content
           Positioned.fill(
@@ -805,20 +884,6 @@ class _DeviceWrapperState extends State<DeviceWrapper>
             }(),
           ],
 
-          // Home indicator
-          if (config.showHomeIndicator)
-            Positioned(
-              bottom: isLandscape ? null : config.borderWidth + 8,
-              right: isLandscape ? config.borderWidth + 8 : null,
-              left: isLandscape ? null : 0,
-              top: isLandscape ? 0 : null,
-              child: isLandscape
-                  ? RotatedBox(
-                      quarterTurns: 1,
-                      child: _buildHomeIndicator(config),
-                    )
-                  : _buildHomeIndicator(config),
-            ),
 
           // Side buttons
           if (!isLandscape) _buildSideButtons(config),
@@ -829,6 +894,50 @@ class _DeviceWrapperState extends State<DeviceWrapper>
 
   Widget _buildStatusBar(DeviceConfig config, bool isLandscape) {
     final isSamsung = config.isSamsung;
+
+    // Use high-fidelity PNG status bar only when the photo-realistic iPhone
+    // frame is active (portrait mode only).
+    if (_realisticFrame &&
+        _currentMode == DeviceMode.iphone &&
+        !isLandscape) {
+      final prefix = _theme == WrapperTheme.light ? 'white' : 'black';
+      final barHeight = config.showNotch ? 59.0 : 32.0;
+      final iconHeight = config.showNotch ? 28.0 : 16.0;
+      final iconTop = config.showNotch ? 22.0 : 8.0;
+      return Positioned(
+        top: 5,
+        left: 0,
+        right: 0,
+        child: SizedBox(
+          height: barHeight,
+          child: Stack(
+            children: [
+              Positioned(
+                top: iconTop,
+                left: 42,
+                child: Image.asset(
+                  'assets/images/iphone_status_bar_${prefix}_left.png',
+                  package: 'device_wrapper',
+                  height: iconHeight,
+                  fit: BoxFit.fitHeight,
+                ),
+              ),
+              Positioned(
+                top: iconTop,
+                right: 32,
+                child: Image.asset(
+                  'assets/images/iphone_status_bar_${prefix}_right.png',
+                  package: 'device_wrapper',
+                  height: iconHeight,
+                  fit: BoxFit.fitHeight,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     final now = DateTime.now();
     final timeString =
         '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
@@ -1560,6 +1669,17 @@ class _DeviceWrapperState extends State<DeviceWrapper>
                 tooltip: 'Ctrl+Shift+T',
               ),
               _buildToolbarDivider(),
+              // Realistic frame toggle (iPhone portrait only)
+              if (_currentMode == DeviceMode.iphone &&
+                  _orientation == DeviceOrientation.portrait &&
+                  !_isScreenOnly) ...[
+                _buildToolbarButton(
+                  label: 'Realistic',
+                  isActive: _realisticFrame,
+                  onTap: _toggleRealisticFrame,
+                ),
+                _buildToolbarDivider(),
+              ],
               // Screenshot button
               _buildToolbarButton(
                 label: 'Screenshot',
