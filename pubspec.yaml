@@ -26,6 +26,7 @@ flutter:
     - assets/images/iphone_status_bar_black_right.png
     - assets/images/iphone_status_bar_white_left.png
     - assets/images/iphone_status_bar_white_right.png
+    - assets/images/iphone16pro_black.png
 
 dev_dependencies:
   flutter_test:
